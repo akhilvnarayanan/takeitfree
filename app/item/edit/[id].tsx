@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,13 +12,13 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { router } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import Colors from "@/constants/colors";
-import { useAuth } from "@/lib/AuthContext";
 import {
-  createItem,
+  getItemById,
+  updateItem,
   ItemCategory,
   ItemCondition,
   CATEGORY_LABELS,
@@ -28,86 +28,59 @@ import {
 const categories = Object.entries(CATEGORY_LABELS) as [ItemCategory, string][];
 const conditions = Object.entries(CONDITION_LABELS) as [ItemCondition, string][];
 
-export default function CreateScreen() {
+export default function EditItemScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<ItemCategory | null>(null);
-  const [condition, setCondition] = useState<ItemCondition | null>(null);
-  const [pickupArea, setPickupArea] = useState(user?.location || "");
+  const [category, setCategory] = useState<ItemCategory>("other");
+  const [condition, setCondition] = useState<ItemCondition>("used_good");
+  const [pickupArea, setPickupArea] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const pickImage = async () => {
-    if (images.length >= 5) {
-      Alert.alert("Limit reached", "You can add up to 5 images.");
-      return;
+  useEffect(() => {
+    if (id) {
+      getItemById(id).then((item) => {
+        if (item) {
+          setTitle(item.title);
+          setDescription(item.description);
+          setCategory(item.category);
+          setCondition(item.condition);
+          setPickupArea(item.pickupArea);
+          setImages(item.images);
+        }
+      });
     }
+  }, [id]);
+
+  const pickImage = async () => {
+    if (images.length >= 5) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.7,
-      allowsMultipleSelection: true,
       selectionLimit: 5 - images.length,
     });
     if (!result.canceled) {
-      setImages((prev) => [
-        ...prev,
-        ...result.assets.map((a) => a.uri).slice(0, 5 - prev.length),
-      ]);
+      setImages((prev) => [...prev, ...result.assets.map((a) => a.uri).slice(0, 5 - prev.length)]);
     }
   };
 
-  const removeImage = (index: number) => {
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = async () => {
-    if (!title.trim()) {
-      Alert.alert("Missing title", "Please add a title for your item.");
-      return;
-    }
-    if (!category) {
-      Alert.alert("Missing category", "Please select a category.");
-      return;
-    }
-    if (!condition) {
-      Alert.alert("Missing condition", "Please select the item condition.");
-      return;
-    }
-    if (!pickupArea.trim()) {
-      Alert.alert("Missing pickup area", "Please add a pickup area.");
-      return;
-    }
-    if (!user) return;
-
+  const handleSave = async () => {
+    if (!title.trim() || !id) return;
     setLoading(true);
     try {
-      await createItem({
-        userId: user.id,
+      await updateItem(id, {
         title: title.trim(),
         description: description.trim(),
         category,
         condition,
-        images,
         pickupArea: pickupArea.trim(),
+        images,
       });
-      Alert.alert("Listed!", "Your item is now available for the community.", [
-        {
-          text: "OK",
-          onPress: () => {
-            setTitle("");
-            setDescription("");
-            setCategory(null);
-            setCondition(null);
-            setPickupArea(user.location || "");
-            setImages([]);
-            router.push("/(tabs)");
-          },
-        },
-      ]);
+      router.back();
     } catch (e: any) {
-      Alert.alert("Error", e.message || "Could not create listing.");
+      Alert.alert("Error", e.message);
     } finally {
       setLoading(false);
     }
@@ -121,13 +94,23 @@ export default function CreateScreen() {
           { paddingTop: Platform.OS === "web" ? 67 : insets.top + 8 },
         ]}
       >
-        <Text style={styles.headerTitle}>Give Away Item</Text>
+        <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="close" size={26} color={Colors.light.text} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Edit Listing</Text>
+        <Pressable onPress={handleSave} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator size="small" color={Colors.light.tint} />
+          ) : (
+            <Ionicons name="checkmark" size={26} color={Colors.light.tint} />
+          )}
+        </Pressable>
       </View>
 
       <ScrollView
         contentContainerStyle={{
           padding: 20,
-          paddingBottom: insets.bottom + 120,
+          paddingBottom: insets.bottom + 40,
         }}
         keyboardShouldPersistTaps="handled"
       >
@@ -136,7 +119,7 @@ export default function CreateScreen() {
             <View key={i} style={styles.imageThumb}>
               <Image source={{ uri }} style={styles.imageThumbImg} />
               <Pressable
-                onPress={() => removeImage(i)}
+                onPress={() => setImages((prev) => prev.filter((_, idx) => idx !== i))}
                 style={styles.removeImg}
                 hitSlop={8}
               >
@@ -147,7 +130,6 @@ export default function CreateScreen() {
           {images.length < 5 && (
             <View style={styles.addImageBtn}>
               <Ionicons name="camera-outline" size={28} color={Colors.light.tint} />
-              <Text style={styles.addImageText}>{images.length}/5</Text>
             </View>
           )}
         </Pressable>
@@ -158,8 +140,6 @@ export default function CreateScreen() {
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder="What are you giving away?"
-            placeholderTextColor={Colors.light.textSecondary}
             maxLength={80}
           />
         </View>
@@ -167,14 +147,11 @@ export default function CreateScreen() {
         <View style={styles.field}>
           <Text style={styles.label}>Description</Text>
           <TextInput
-            style={[styles.input, styles.textArea]}
+            style={[styles.input, { minHeight: 100 }]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Describe the item, its history, why you're giving it away..."
-            placeholderTextColor={Colors.light.textSecondary}
             multiline
             textAlignVertical="top"
-            maxLength={500}
           />
         </View>
 
@@ -187,12 +164,7 @@ export default function CreateScreen() {
                 onPress={() => setCategory(key)}
                 style={[styles.chip, category === key && styles.chipActive]}
               >
-                <Text
-                  style={[
-                    styles.chipText,
-                    category === key && styles.chipTextActive,
-                  ]}
-                >
+                <Text style={[styles.chipText, category === key && styles.chipTextActive]}>
                   {label}
                 </Text>
               </Pressable>
@@ -209,12 +181,7 @@ export default function CreateScreen() {
                 onPress={() => setCondition(key)}
                 style={[styles.chip, condition === key && styles.chipActive]}
               >
-                <Text
-                  style={[
-                    styles.chipText,
-                    condition === key && styles.chipTextActive,
-                  ]}
-                >
+                <Text style={[styles.chipText, condition === key && styles.chipTextActive]}>
                   {label}
                 </Text>
               </Pressable>
@@ -224,56 +191,32 @@ export default function CreateScreen() {
 
         <View style={styles.field}>
           <Text style={styles.label}>Pickup Area</Text>
-          <View style={styles.inputRow}>
-            <Ionicons name="location-outline" size={18} color={Colors.light.textSecondary} />
-            <TextInput
-              style={[styles.input, { flex: 1, borderWidth: 0, paddingVertical: 0 }]}
-              value={pickupArea}
-              onChangeText={setPickupArea}
-              placeholder="Where can they pick it up?"
-              placeholderTextColor={Colors.light.textSecondary}
-            />
-          </View>
+          <TextInput
+            style={styles.input}
+            value={pickupArea}
+            onChangeText={setPickupArea}
+          />
         </View>
-
-        <Pressable
-          onPress={handleSubmit}
-          disabled={loading}
-          style={({ pressed }) => [
-            styles.submitBtn,
-            pressed && { opacity: 0.9 },
-            loading && { opacity: 0.7 },
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle" size={22} color="#fff" />
-              <Text style={styles.submitText}>Post Item</Text>
-            </>
-          )}
-        </Pressable>
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.light.background },
   header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: Colors.light.surface,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.border,
   },
   headerTitle: {
-    fontSize: 22,
-    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    fontFamily: "Inter_600SemiBold",
     color: Colors.light.text,
   },
   imagePickerRow: {
@@ -289,15 +232,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
-  imageThumbImg: {
-    width: "100%",
-    height: "100%",
-  },
-  removeImg: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-  },
+  imageThumbImg: { width: "100%", height: "100%" },
+  removeImg: { position: "absolute", top: 2, right: 2 },
   addImageBtn: {
     width: 72,
     height: 72,
@@ -309,15 +245,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Colors.light.surfaceSecondary,
   },
-  addImageText: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.light.tint,
-    marginTop: 2,
-  },
-  field: {
-    marginBottom: 18,
-  },
+  field: { marginBottom: 18 },
   label: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
@@ -338,25 +266,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     color: Colors.light.text,
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: Colors.light.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.light.border,
-    paddingHorizontal: 14,
-    gap: 8,
-    height: 48,
-  },
-  textArea: {
-    minHeight: 100,
-  },
-  chipGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
+  chipGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -374,22 +284,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: Colors.light.textSecondary,
   },
-  chipTextActive: {
-    color: "#fff",
-  },
-  submitBtn: {
-    backgroundColor: Colors.light.tint,
-    borderRadius: 14,
-    height: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-  submitText: {
-    color: "#fff",
-    fontSize: 17,
-    fontFamily: "Inter_600SemiBold",
-  },
+  chipTextActive: { color: "#fff" },
 });

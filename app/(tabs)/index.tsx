@@ -1,126 +1,197 @@
-import React, { useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
+  TextInput,
   FlatList,
+  Pressable,
   StyleSheet,
-  RefreshControl,
-  ActivityIndicator,
   Platform,
+  RefreshControl,
+  ScrollView,
 } from "react-native";
-import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
-import PostCard from "@/components/PostCard";
-import { usePosts } from "@/lib/PostsContext";
+import { useAuth } from "@/lib/AuthContext";
+import {
+  getItems,
+  getUserById,
+  Item,
+  ItemCategory,
+  CATEGORY_LABELS,
+} from "@/lib/storage";
+import { ItemCard } from "@/components/ItemCard";
+import { useFocusEffect } from "expo-router";
 
-export default function FeedScreen() {
-  const { posts, loading, refreshPosts, toggleLike } = usePosts();
+const CATEGORIES: { key: ItemCategory | "all"; label: string; icon: string }[] = [
+  { key: "all", label: "All", icon: "grid-outline" },
+  { key: "electronics", label: "Electronics", icon: "laptop-outline" },
+  { key: "furniture", label: "Furniture", icon: "bed-outline" },
+  { key: "clothing", label: "Clothing", icon: "shirt-outline" },
+  { key: "books", label: "Books", icon: "book-outline" },
+  { key: "kitchen", label: "Kitchen", icon: "restaurant-outline" },
+  { key: "toys", label: "Toys", icon: "game-controller-outline" },
+  { key: "sports", label: "Sports", icon: "bicycle-outline" },
+  { key: "garden", label: "Garden", icon: "leaf-outline" },
+  { key: "other", label: "Other", icon: "ellipsis-horizontal-outline" },
+];
+
+export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [items, setItems] = useState<(Item & { ownerName: string; ownerLocation: string })[]>([]);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<ItemCategory | "all">("all");
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleLike = useCallback(
-    (id: string) => {
-      toggleLike(id);
-    },
-    [toggleLike]
+  const loadItems = useCallback(async () => {
+    const filters: any = { status: "available" as const };
+    if (category !== "all") filters.category = category;
+    if (search.trim()) filters.search = search.trim();
+
+    const raw = await getItems(filters);
+    const withOwner = await Promise.all(
+      raw.map(async (item) => {
+        const owner = await getUserById(item.userId);
+        return {
+          ...item,
+          ownerName: owner?.name || "Unknown",
+          ownerLocation: owner?.location || "",
+        };
+      })
+    );
+    setItems(withOwner);
+  }, [category, search]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadItems();
+    }, [loadItems])
   );
 
-  const handleComment = useCallback((id: string) => {
-    router.push({ pathname: "/post/[id]", params: { id } });
-  }, []);
-
-  const handlePress = useCallback((id: string) => {
-    router.push({ pathname: "/post/[id]", params: { id } });
-  }, []);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadItems();
+    setRefreshing(false);
+  };
 
   const renderItem = useCallback(
-    ({ item }: { item: (typeof posts)[0] }) => (
-      <PostCard
-        post={item}
-        onLike={handleLike}
-        onComment={handleComment}
-        onPress={handlePress}
-      />
+    ({ item }: { item: (typeof items)[0] }) => (
+      <View style={styles.cardWrapper}>
+        <ItemCard
+          item={item}
+          ownerName={item.ownerName}
+          ownerLocation={item.ownerLocation}
+        />
+      </View>
     ),
-    [handleLike, handleComment, handlePress]
+    []
   );
-
-  const ListHeader = () => (
-    <View
-      style={[
-        styles.headerContainer,
-        { paddingTop: Platform.OS === "web" ? 67 : insets.top + 12 },
-      ]}
-    >
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.headerTitle}>TakeItFree</Text>
-          <Text style={styles.headerSubtitle}>Share freely, live lightly</Text>
-        </View>
-        <View style={styles.headerIcon}>
-          <Ionicons name="leaf" size={24} color={Colors.light.tint} />
-        </View>
-      </View>
-
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{posts.length}</Text>
-          <Text style={styles.statLabel}>Posts</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {posts.filter((p) => p.postType === "giving").length}
-          </Text>
-          <Text style={styles.statLabel}>Giving</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {posts.reduce((acc, p) => acc + p.likeCount, 0)}
-          </Text>
-          <Text style={styles.statLabel}>Likes</Text>
-        </View>
-      </View>
-    </View>
-  );
-
-  const ListEmpty = () =>
-    !loading ? (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="leaf-outline" size={48} color={Colors.light.textSecondary} />
-        <Text style={styles.emptyTitle}>No posts yet</Text>
-        <Text style={styles.emptyText}>
-          Be the first to share something with the community
-        </Text>
-      </View>
-    ) : null;
-
-  if (loading && posts.length === 0) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.light.tint} />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: Platform.OS === "web" ? 67 : insets.top + 8 },
+        ]}
+      >
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.greeting}>Hi, {user?.name?.split(" ")[0]}</Text>
+            <Text style={styles.subtitle}>Find something you need</Text>
+          </View>
+          <View style={styles.locationPill}>
+            <Ionicons name="location" size={14} color={Colors.light.tint} />
+            <Text style={styles.locationText}>{user?.location || "Set location"}</Text>
+          </View>
+        </View>
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={18} color={Colors.light.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search items..."
+            placeholderTextColor={Colors.light.textSecondary}
+            returnKeyType="search"
+            onSubmitEditing={loadItems}
+          />
+          {search.length > 0 && (
+            <Pressable
+              onPress={() => {
+                setSearch("");
+              }}
+              hitSlop={8}
+            >
+              <Ionicons name="close-circle" size={18} color={Colors.light.textSecondary} />
+            </Pressable>
+          )}
+        </View>
+      </View>
+
       <FlatList
-        data={posts}
+        data={items}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
+        numColumns={2}
+        columnWrapperStyle={styles.row}
         contentContainerStyle={{
-          paddingBottom: Platform.OS === "web" ? 118 : 100,
+          paddingHorizontal: 16,
+          paddingBottom: insets.bottom + 100,
+          paddingTop: 8,
         }}
-        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.catScroll}
+            contentContainerStyle={styles.catContainer}
+          >
+            {CATEGORIES.map((cat) => (
+              <Pressable
+                key={cat.key}
+                onPress={() => setCategory(cat.key)}
+                style={[
+                  styles.catPill,
+                  category === cat.key && styles.catPillActive,
+                ]}
+              >
+                <Ionicons
+                  name={cat.icon as any}
+                  size={16}
+                  color={
+                    category === cat.key ? "#fff" : Colors.light.textSecondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.catPillText,
+                    category === cat.key && styles.catPillTextActive,
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        }
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Ionicons name="search" size={48} color={Colors.light.tabIconDefault} />
+            <Text style={styles.emptyTitle}>No items found</Text>
+            <Text style={styles.emptyText}>
+              {search
+                ? "Try different keywords"
+                : "Be the first to give something away!"}
+            </Text>
+          </View>
+        }
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={refreshPosts}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             tintColor={Colors.light.tint}
           />
         }
@@ -134,77 +205,103 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
   },
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.light.background,
-  },
-  headerContainer: {
+  header: {
+    backgroundColor: Colors.light.surface,
     paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
   },
-  headerRow: {
+  headerTop: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    alignItems: "flex-start",
+    marginBottom: 12,
   },
-  headerTitle: {
-    fontSize: 28,
+  greeting: {
+    fontSize: 22,
     fontFamily: "Inter_700Bold",
     color: Colors.light.text,
   },
-  headerSubtitle: {
+  subtitle: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
     marginTop: 2,
   },
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.light.tint + "15",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  statsRow: {
+  locationPill: {
     flexDirection: "row",
-    backgroundColor: Colors.light.surface,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  statItem: {
-    flex: 1,
     alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.light.surfaceSecondary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  statNumber: {
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
+  locationText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
     color: Colors.light.text,
   },
-  statLabel: {
-    fontSize: 12,
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.light.surfaceSecondary,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
     fontFamily: "Inter_400Regular",
+    color: Colors.light.text,
+  },
+  catScroll: {
+    marginBottom: 8,
+  },
+  catContainer: {
+    gap: 8,
+    paddingVertical: 4,
+  },
+  catPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.light.surface,
+    borderWidth: 1,
+    borderColor: Colors.light.border,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  catPillActive: {
+    backgroundColor: Colors.light.tint,
+    borderColor: Colors.light.tint,
+  },
+  catPillText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
     color: Colors.light.textSecondary,
-    marginTop: 2,
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: Colors.light.border,
+  catPillTextActive: {
+    color: "#fff",
   },
-  emptyContainer: {
+  row: {
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 12,
+  },
+  cardWrapper: {
+    flex: 1,
+    maxWidth: "48.5%",
+  },
+  empty: {
     alignItems: "center",
     justifyContent: "center",
-    paddingTop: 60,
-    gap: 10,
+    paddingVertical: 60,
+    gap: 8,
   },
   emptyTitle: {
     fontSize: 18,
@@ -215,7 +312,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
-    textAlign: "center",
-    paddingHorizontal: 40,
   },
 });

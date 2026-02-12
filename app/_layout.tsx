@@ -12,15 +12,48 @@ import {
 } from "@expo-google-fonts/inter";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
-import { PostsProvider } from "@/lib/PostsContext";
+import { AuthProvider, useAuth } from "@/lib/AuthContext";
+import { ActivityIndicator, View } from "react-native";
+import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: Colors.light.background,
+        }}
+      >
+        <ActivityIndicator size="large" color={Colors.light.tint} />
+      </View>
+    );
+  }
+
   return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="post/[id]" options={{ headerShown: false }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      {user ? (
+        <>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="item/[id]" options={{ presentation: "card" }} />
+          <Stack.Screen name="item/create" options={{ presentation: "modal" }} />
+          <Stack.Screen name="item/edit/[id]" options={{ presentation: "modal" }} />
+          <Stack.Screen name="item/requests/[id]" options={{ presentation: "card" }} />
+          <Stack.Screen name="chat/[requestId]" options={{ presentation: "card" }} />
+          <Stack.Screen name="user/[id]" options={{ presentation: "card" }} />
+        </>
+      ) : (
+        <>
+          <Stack.Screen name="auth/login" />
+          <Stack.Screen name="auth/register" />
+        </>
+      )}
     </Stack>
   );
 }
@@ -38,20 +71,18 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
-  if (!fontsLoaded) {
-    return null;
-  }
+  if (!fontsLoaded) return null;
 
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <PostsProvider>
+        <AuthProvider>
           <GestureHandlerRootView>
             <KeyboardProvider>
               <RootLayoutNav />
             </KeyboardProvider>
           </GestureHandlerRootView>
-        </PostsProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

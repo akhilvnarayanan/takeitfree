@@ -2,42 +2,86 @@ import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
+  FlatList,
   Pressable,
   StyleSheet,
   Platform,
   Alert,
-  FlatList,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useFocusEffect } from "expo-router";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/AuthContext";
-import { getItems, Item } from "@/lib/storage";
+import {
+  getUserById,
+  getItems,
+  blockUser,
+  unblockUser,
+  reportItem,
+  User,
+  Item,
+} from "@/lib/storage";
 import { ItemCard } from "@/components/ItemCard";
 
-export default function ProfileScreen() {
+export default function UserProfileScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { user, logout, refreshUser } = useAuth();
-  const [myItems, setMyItems] = useState<Item[]>([]);
+  const { user, refreshUser } = useAuth();
+  const [profileUser, setProfileUser] = useState<User | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      if (user) {
-        refreshUser();
-        getItems({ userId: user.id }).then(setMyItems);
-      }
-    }, [user])
+      if (!id) return;
+      (async () => {
+        const u = await getUserById(id);
+        setProfileUser(u);
+        const itms = await getItems({ userId: id, status: "available" });
+        setItems(itms);
+        if (user) {
+          setIsBlocked(user.blockedUsers?.includes(id) || false);
+        }
+      })();
+    }, [id, user])
   );
 
-  const handleLogout = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign Out", style: "destructive", onPress: logout },
-    ]);
+  const handleBlock = async () => {
+    if (!user || !id) return;
+    if (isBlocked) {
+      await unblockUser(user.id, id);
+      setIsBlocked(false);
+      await refreshUser();
+    } else {
+      Alert.alert("Block User", "They won't be able to see your listings.", [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Block",
+          style: "destructive",
+          onPress: async () => {
+            await blockUser(user.id, id);
+            setIsBlocked(true);
+            await refreshUser();
+          },
+        },
+      ]);
+    }
   };
 
-  if (!user) return null;
+  const handleReport = async () => {
+    if (!user || !id) return;
+    await reportItem(user.id, "user", id, "Reported by user");
+    Alert.alert("Reported", "Thank you. We'll review this account.");
+  };
+
+  if (!profileUser) {
+    return (
+      <View style={[styles.container, { alignItems: "center", justifyContent: "center" }]}>
+        <Text>User not found</Text>
+      </View>
+    );
+  }
 
   const ListHeader = () => (
     <View
@@ -47,62 +91,70 @@ export default function ProfileScreen() {
       ]}
     >
       <View style={styles.headerRow}>
-        <View style={{ flex: 1 }} />
-        <Pressable onPress={handleLogout} hitSlop={12}>
-          <Ionicons name="log-out-outline" size={24} color={Colors.light.textSecondary} />
+        <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name="chevron-back" size={26} color={Colors.light.text} />
         </Pressable>
+        <View style={styles.headerActions}>
+          {user?.id !== id && (
+            <>
+              <Pressable onPress={handleReport} hitSlop={8}>
+                <Ionicons name="flag-outline" size={20} color={Colors.light.textSecondary} />
+              </Pressable>
+              <Pressable onPress={handleBlock} hitSlop={8}>
+                <Ionicons
+                  name={isBlocked ? "person-add" : "ban"}
+                  size={20}
+                  color={isBlocked ? Colors.light.tint : Colors.light.danger}
+                />
+              </Pressable>
+            </>
+          )}
+        </View>
       </View>
 
       <View style={styles.avatarLarge}>
         <Text style={styles.avatarLargeText}>
-          {user.name.charAt(0).toUpperCase()}
+          {profileUser.name.charAt(0).toUpperCase()}
         </Text>
       </View>
-      <Text style={styles.userName}>{user.name}</Text>
+      <Text style={styles.userName}>{profileUser.name}</Text>
       <View style={styles.locationRow}>
         <Ionicons name="location-outline" size={14} color={Colors.light.textSecondary} />
-        <Text style={styles.locationText}>{user.location}</Text>
+        <Text style={styles.locationText}>{profileUser.location}</Text>
       </View>
 
       <View style={styles.statsCard}>
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{user.reputationScore}</Text>
+          <Text style={styles.statNumber}>{profileUser.reputationScore}</Text>
           <Text style={styles.statLabel}>Reputation</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{user.itemsGivenCount}</Text>
+          <Text style={styles.statNumber}>{profileUser.itemsGivenCount}</Text>
           <Text style={styles.statLabel}>Given</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{user.itemsReceivedCount}</Text>
+          <Text style={styles.statNumber}>{profileUser.itemsReceivedCount}</Text>
           <Text style={styles.statLabel}>Received</Text>
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>My Listings</Text>
+      <Text style={styles.sectionTitle}>Available Items</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={myItems}
+        data={items}
         keyExtractor={(item) => item.id}
         numColumns={2}
         columnWrapperStyle={styles.row}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="cube-outline" size={40} color={Colors.light.tabIconDefault} />
-            <Text style={styles.emptyText}>No listings yet</Text>
-            <Pressable
-              onPress={() => router.push("/(tabs)/create")}
-              style={styles.createBtn}
-            >
-              <Text style={styles.createBtnText}>Give something away</Text>
-            </Pressable>
+            <Text style={styles.emptyText}>No available items</Text>
           </View>
         }
         renderItem={({ item }) => (
@@ -112,7 +164,7 @@ export default function ProfileScreen() {
         )}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: insets.bottom + 40,
         }}
         showsVerticalScrollIndicator={false}
       />
@@ -121,19 +173,20 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.background,
-  },
+  container: { flex: 1, backgroundColor: Colors.light.background },
   profileSection: {
     alignItems: "center",
     paddingBottom: 16,
   },
   headerRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     width: "100%",
-    marginBottom: 8,
+    marginBottom: 16,
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 16,
   },
   avatarLarge: {
     width: 80,
@@ -176,10 +229,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.border,
     marginBottom: 24,
   },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
+  statItem: { flex: 1, alignItems: "center" },
   statNumber: {
     fontSize: 22,
     fontFamily: "Inter_700Bold",
@@ -214,23 +264,10 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     paddingTop: 40,
-    gap: 10,
   },
   emptyText: {
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     color: Colors.light.textSecondary,
-  },
-  createBtn: {
-    backgroundColor: Colors.light.tint,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 8,
-  },
-  createBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
   },
 });
