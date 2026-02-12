@@ -1,0 +1,302 @@
+take the required function from below MVP, which is required in the current app
+
+MVP SPECIFICATION
+Free Community Item Sharing App (Carousell-like, No Cost)
+1. MVP OBJECTIVE
+
+Build a mobile-first application that allows users to give away items for free to nearby community members, enabling local reuse and trust-based sharing.
+
+2. USER ROLES
+
+Giver – posts items to give away
+
+Receiver – requests items
+
+Admin – basic moderation (manual, minimal)
+
+3. CORE FUNCTIONAL REQUIREMENTS
+3.1 Authentication & User Profile
+
+Required
+
+Login via:
+
+Phone number (OTP)
+
+Email + password
+
+User profile fields:
+
+User ID
+
+Name
+
+Profile photo (optional)
+
+Location (city / area only, no exact address)
+
+Reputation score (system-generated)
+
+Logout
+
+Out of scope
+
+Social login
+
+KYC / ID verification
+
+3.2 Item Listing (Free Items Only)
+
+Create Listing
+
+Upload 1–5 images
+
+Item title
+
+Item description
+
+Category (enum)
+
+Item condition:
+
+New
+
+Used – Good
+
+Used – Fair
+
+Needs repair
+
+Pickup area (approximate)
+
+Listing status:
+
+Available
+
+Reserved
+
+Given Away
+
+Rules
+
+No price field
+
+One active status at a time
+
+Only owner can edit or delete listing
+
+3.3 Browse & Discovery
+
+Home feed:
+
+Nearby available items (location-based)
+
+Category-based browsing
+
+Keyword search (title + description)
+
+Basic sorting:
+
+Newest first
+
+3.4 Item Request Flow
+
+“Request Item” button on listing
+
+Optional request message
+
+Request states:
+
+Pending
+
+Accepted
+
+Rejected
+
+Giver can view list of requesters
+
+Giver manually selects one requester
+
+3.5 Chat System
+
+One-to-one chat between giver and requester
+
+Chat opens only after request is sent
+
+Text messages only (no media in MVP)
+
+System messages:
+
+Request accepted
+
+Item marked as given
+
+3.6 Handover & Completion
+
+Giver marks item as “Given Away”
+
+Optional receiver confirmation
+
+Item becomes read-only
+
+Listing removed from active feed
+
+3.7 Reputation & Trust (Lightweight)
+
+Reputation points:
+
++1 for successful give
+
++1 for successful receive
+
+Display:
+
+Total items given
+
+Total items received
+
+Report user / listing
+
+Block user
+
+3.8 Admin (Minimal)
+
+View reported users/listings
+
+Disable user account
+
+Remove listing
+
+4. NON-FUNCTIONAL REQUIREMENTS
+Performance
+
+Feed load < 2 seconds (normal network)
+
+Image compression on upload
+
+Security
+
+OTP expiration
+
+Basic rate limiting
+
+No exact address storage
+
+Privacy
+
+Location shown as area only
+
+Chat hidden after item completion (optional)
+
+5. DATA MODELS (MVP LEVEL)
+User
+User {
+  id
+  name
+  phone/email
+  location
+  reputation_score
+  items_given_count
+  items_received_count
+  created_at
+}
+
+Item
+Item {
+  id
+  user_id
+  title
+  description
+  category
+  condition
+  location
+  status
+  created_at
+}
+
+Request
+Request {
+  id
+  item_id
+  requester_id
+  status
+  created_at
+}
+
+ChatMessage
+ChatMessage {
+  id
+  request_id
+  sender_id
+  message
+  timestamp
+}
+
+Report
+Report {
+  id
+  reporter_id
+  target_type (user/item)
+  target_id
+  reason
+}
+
+6. API MODULES (HIGH LEVEL)
+
+Auth Service
+
+User Profile Service
+
+Item Service
+
+Search & Feed Service
+
+Request Service
+
+Chat Service
+
+Admin Service
+
+7. MVP TECHNOLOGY SUGGESTION (OPTIONAL)
+
+Frontend: Flutter / React Native / Web (PWA)
+
+Backend: Node.js / Django / Spring Boot
+
+DB: PostgreSQL / MongoDB
+
+Storage: Object storage for images
+
+Real-time: WebSocket / Firebase (chat)
+
+8. MVP EXCLUSIONS (STRICT)
+
+Payments
+
+Shipping
+
+Ads
+
+AI recommendations
+
+Gamification
+
+Social feeds
+
+Group chats
+
+Business accounts
+
+9. MVP SUCCESS CRITERIA
+
+Users can post items in < 2 minutes
+
+At least 60% of listings reach “Given Away”
+
+Repeat givers > 30%
+
+Low abuse reports
+
+10. ONE-LINE BUILD DEFINITION
+
+Build a local community app where users give items away for free, request items nearby, chat safely, and complete handovers without money.
