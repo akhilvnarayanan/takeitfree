@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, Redirect, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -20,6 +20,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { user, loading } = useAuth();
+  const segments = useSegments();
 
   if (loading) {
     return (
@@ -36,24 +37,23 @@ function RootLayoutNav() {
     );
   }
 
+  const inAuthGroup = segments[0] === "auth";
+
+  if (!user && !inAuthGroup) {
+    return <Redirect href="/auth/login" />;
+  }
+
+  if (user && inAuthGroup) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {user ? (
-        <>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="item/[id]" options={{ presentation: "card" }} />
-          <Stack.Screen name="item/create" options={{ presentation: "modal" }} />
-          <Stack.Screen name="item/edit/[id]" options={{ presentation: "modal" }} />
-          <Stack.Screen name="item/requests/[id]" options={{ presentation: "card" }} />
-          <Stack.Screen name="chat/[requestId]" options={{ presentation: "card" }} />
-          <Stack.Screen name="user/[id]" options={{ presentation: "card" }} />
-        </>
-      ) : (
-        <>
-          <Stack.Screen name="auth/login" />
-          <Stack.Screen name="auth/register" />
-        </>
-      )}
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="auth" />
+      <Stack.Screen name="item" />
+      <Stack.Screen name="chat" />
+      <Stack.Screen name="user" />
     </Stack>
   );
 }
