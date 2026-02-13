@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "TakeItFree Mobile",
+    "slug": "takeitfree-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.takeitfree.mobile"
+    },
+    "android": {
+      "package": "com.takeitfree.mobile"
+    },
+    "plugins": [
+      "expo-notifications"
+    ],
+    "extra": {
+      "supabaseUrl": "https://YOUR_PROJECT.supabase.co",
+      "supabaseAnonKey": "YOUR_ANON_KEY"
+    }
+  }
+}
